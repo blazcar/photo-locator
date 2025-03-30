@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera & Location App</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        body { text-align: center; font-family: Arial, sans-serif; }
+        video, canvas { width: 100%; max-width: 400px; margin-top: 10px; }
+        button { margin-top: 10px; padding: 10px; font-size: 16px; }
+        #locationText { margin-top: 10px; font-size: 16px; }
+    </style>
+</head>
+<body>
+    <h2>Take a Photo with Location</h2>
+    <video id="video" autoplay></video>
+    <button id="toggleCamera">Switch Camera</button>
+    <button id="capture">Capture Photo</button>
+    <canvas id="canvas"></canvas>
+    <p id="locationText"></p>
+    <button id="copyLocation" style="display:none;">Copy Location</button>
+    <button id="downloadPdf" style="display:none;">Download PDF</button>
+    
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const captureBtn = document.getElementById('capture');
+        const toggleCameraBtn = document.getElementById('toggleCamera');
+        const downloadPdfBtn = document.getElementById('downloadPdf');
+        const locationText = document.getElementById('locationText');
+        const copyLocationBtn = document.getElementById('copyLocation');
+
+        let currentCamera = 'environment'; // Default to back camera
+        let stream = null;
+
+        async function startCamera(cameraFacing) {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: cameraFacing } });
+                video.srcObject = stream;
+            } catch (err) {
+                console.error("Camera access denied", err);
+            }
+        }
+
+        // Start with back camera
+        startCamera(currentCamera);
+
+        // Toggle between front and back cameras
+        toggleCameraBtn.addEventListener('click', () => {
+            currentCamera = currentCamera === 'environment' ? 'user' : 'environment';
+            startCamera(currentCamera);
+        });
+
+        // Get location
+        function getLocation(callback) {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(position => {
+                    const { latitude, longitude } = position.coords;
+                    callback(latitude, longitude);
+                }, () => alert("Location access denied!"));
+            } else {
+                alert("Geolocation not supported!");
+            }
+        }
+
+        // Capture photo and create a PDF
+        captureBtn.addEventListener('click', () => {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0);
+            
+            getLocation((lat, lon) => {
+                const locationStr = `${lat.toFixed(5)},${lon.toFixed(5)}`;
+                
+                // Display location text
+                locationText.innerText = locationStr;
+                copyLocationBtn.style.display = "block";
+                downloadPdfBtn.style.display = "block";
+
+                // Generate unique filename with timestamp
+                const timestamp = new Date().toISOString().replace(/[:.-]/g, "_");
+                const fileName = `photo_location_${timestamp}.pdf`;
+
+                // Download PDF with image and selectable text
+                downloadPdfBtn.addEventListener('click', () => {
+                    const { jsPDF } = window.jspdf;
+                    const pdf = new jsPDF();
+                    pdf.addImage(canvas.toDataURL("image/png"), 'PNG', 10, 10, 180, 120);
+                    pdf.text(locationStr, 10, 140);
+                    pdf.save(fileName);
+                });
+            });
+        });
+
+        // Copy location to clipboard
+        copyLocationBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(locationText.innerText).then(() => {
+                alert("Location copied to clipboard!");
+            }).catch(err => console.error("Failed to copy location", err));
+        });
+    </script>
+</body>
+</html>
